@@ -17,8 +17,8 @@ Core types and utilities for building Triton DataCenter integrations in Rust.
 - **Service Enumeration** - Type-safe representation of all Triton services
 - **Configuration Management** - Validated configuration structures with builder patterns
 - **HTTP Client Utilities** - Retry policies with exponential backoff, connection pooling
-- **Endpoint Management** - Service endpoint discovery and caching with health tracking
-- **Well-Tested** - 112 unit tests with 91.55% code coverage
+- **Endpoint Management** - Service endpoint discovery with health tracking
+- **Well-Tested** - 107 unit tests with high code coverage
 
 ## Installation
 
@@ -193,7 +193,6 @@ HTTP client utilities:
 - Service timeout constants
 - `RetryPolicy` - Exponential backoff retry logic
 - `ClientConfig` - HTTP client configuration
-- `CacheStats` - Cache performance metrics
 
 ### `services`
 Service discovery and integration:
@@ -236,8 +235,8 @@ cargo test client
 ```
 
 **Test Results:**
-- 112 unit tests
-- 91.55% code coverage
+- 107 unit tests
+- High code coverage
 - Zero unsafe code
 - All tests pass
 

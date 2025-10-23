@@ -11,7 +11,7 @@
 //! - [`uuid`] - Strongly-typed UUID wrappers for Triton resources
 //! - [`types`] - Core Triton domain types (VMs, networks, packages, etc.)
 //! - [`config`] - Configuration structures for Triton clients
-//! - [`client`] - HTTP client utilities, retry logic, and caching
+//! - [`client`] - HTTP client utilities and retry logic
 //! - [`services`] - Service discovery and integration patterns
 
 #![deny(missing_docs)]

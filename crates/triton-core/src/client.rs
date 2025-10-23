@@ -1,6 +1,6 @@
-//! HTTP client utilities, retry logic, and caching.
+//! HTTP client utilities and retry logic.
 //!
-//! This module provides HTTP client configuration, retry policies, and endpoint caching
+//! This module provides HTTP client configuration and retry policies
 //! for reliable communication with Triton DataCenter services.
 
 use std::time::Duration;
@@ -249,67 +249,6 @@ impl Default for ClientConfig {
     }
 }
 
-/// Endpoint cache statistics.
-///
-/// Tracks performance metrics for the endpoint cache.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct CacheStats {
-    /// Number of cache hits
-    pub hits: u64,
-
-    /// Number of cache misses
-    pub misses: u64,
-
-    /// Number of evictions (expired entries removed)
-    pub evictions: u64,
-
-    /// Number of invalidations (manual cache clears)
-    pub invalidations: u64,
-
-    /// Total number of entries currently cached
-    pub total_entries: usize,
-
-    /// Number of expired entries
-    pub expired_entries: usize,
-}
-
-impl CacheStats {
-    /// Create new cache statistics.
-    #[must_use]
-    pub const fn new() -> Self {
-        Self {
-            hits: 0,
-            misses: 0,
-            evictions: 0,
-            invalidations: 0,
-            total_entries: 0,
-            expired_entries: 0,
-        }
-    }
-
-    /// Calculate cache hit ratio (0.0 to 1.0).
-    #[must_use]
-    pub fn hit_ratio(&self) -> f64 {
-        let total = self.hits + self.misses;
-        if total == 0 {
-            0.0
-        } else {
-            self.hits as f64 / total as f64
-        }
-    }
-
-    /// Calculate cache miss ratio (0.0 to 1.0).
-    #[must_use]
-    pub fn miss_ratio(&self) -> f64 {
-        1.0 - self.hit_ratio()
-    }
-
-    /// Check if cache is effective (hit ratio > 50%).
-    #[must_use]
-    pub fn is_effective(&self) -> bool {
-        self.hit_ratio() > 0.5
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -425,60 +364,6 @@ mod tests {
     fn test_client_config_without_retries() {
         let config = ClientConfig::new().without_retries();
         assert_eq!(config.retry_policy.max_retries, 0);
-    }
-
-    #[test]
-    fn test_cache_stats_new() {
-        let stats = CacheStats::new();
-        assert_eq!(stats.hits, 0);
-        assert_eq!(stats.misses, 0);
-        assert_eq!(stats.evictions, 0);
-        assert_eq!(stats.invalidations, 0);
-        assert_eq!(stats.total_entries, 0);
-        assert_eq!(stats.expired_entries, 0);
-    }
-
-    #[test]
-    fn test_cache_stats_default() {
-        let stats = CacheStats::default();
-        assert_eq!(stats.hits, 0);
-        assert_eq!(stats.misses, 0);
-    }
-
-    #[test]
-    fn test_cache_stats_hit_ratio() {
-        let mut stats = CacheStats::new();
-        stats.hits = 75;
-        stats.misses = 25;
-        assert!((stats.hit_ratio() - 0.75).abs() < 0.001);
-
-        // Zero total should return 0.0
-        let empty = CacheStats::new();
-        assert_eq!(empty.hit_ratio(), 0.0);
-    }
-
-    #[test]
-    fn test_cache_stats_miss_ratio() {
-        let mut stats = CacheStats::new();
-        stats.hits = 75;
-        stats.misses = 25;
-        assert!((stats.miss_ratio() - 0.25).abs() < 0.001);
-    }
-
-    #[test]
-    fn test_cache_stats_is_effective() {
-        let mut effective = CacheStats::new();
-        effective.hits = 60;
-        effective.misses = 40;
-        assert!(effective.is_effective());
-
-        let mut ineffective = CacheStats::new();
-        ineffective.hits = 40;
-        ineffective.misses = 60;
-        assert!(!ineffective.is_effective());
-
-        let empty = CacheStats::new();
-        assert!(!empty.is_effective());
     }
 
     #[test]
