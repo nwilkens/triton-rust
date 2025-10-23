@@ -1,0 +1,49 @@
+[package]
+name = "triton-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Core types and utilities for Triton DataCenter"
+repository = "https://github.com/TritonDataCenter/triton-rust"
+keywords = ["triton", "smartos", "datacenter", "cloud"]
+categories = ["api-bindings", "web-programming"]
+
+[dependencies]
+# Async
+tokio = { workspace = true }
+async-trait = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# UUID
+uuid = { workspace = true }
+
+# HTTP
+reqwest = { workspace = true }
+url = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# Security
+secrecy = { workspace = true }
+
+# Validation
+validator = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+[dev-dependencies]
+mockall = { workspace = true }
+wiremock = { workspace = true }
+tokio-test = "0.4"
+
+[lib]
+name = "triton_core"
+path = "src/lib.rs"
