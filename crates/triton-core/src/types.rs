@@ -334,10 +334,22 @@ mod tests {
 
     #[test]
     fn test_triton_service_from_str() {
-        assert_eq!("vmapi".parse::<TritonService>().unwrap(), TritonService::Vmapi);
-        assert_eq!("VMAPI".parse::<TritonService>().unwrap(), TritonService::Vmapi);
-        assert_eq!("cnapi".parse::<TritonService>().unwrap(), TritonService::Cnapi);
-        assert_eq!("workflow".parse::<TritonService>().unwrap(), TritonService::Workflow);
+        assert_eq!(
+            "vmapi".parse::<TritonService>().unwrap(),
+            TritonService::Vmapi
+        );
+        assert_eq!(
+            "VMAPI".parse::<TritonService>().unwrap(),
+            TritonService::Vmapi
+        );
+        assert_eq!(
+            "cnapi".parse::<TritonService>().unwrap(),
+            TritonService::Cnapi
+        );
+        assert_eq!(
+            "workflow".parse::<TritonService>().unwrap(),
+            TritonService::Workflow
+        );
 
         assert!("invalid".parse::<TritonService>().is_err());
     }

@@ -10,21 +10,15 @@ This document provides context and guidance for AI agents working on the triton-
 
 ```
 triton-rust/
-├── Cargo.toml              # Workspace configuration
+├── Cargo.toml                    # Workspace configuration
 ├── .gitignore
-├── AGENTS.md               # This file
-└── crates/
-    └── triton-core/        # ✅ COMPLETE - Foundation crate
-        ├── Cargo.toml
-        ├── README.md       # Comprehensive documentation
-        └── src/
-            ├── lib.rs      # Main library entry
-            ├── error.rs    # Error types (42 lines, 11 tests)
-            ├── uuid.rs     # UUID wrappers (24 lines, 26 tests)
-            ├── types.rs    # Core types (74 lines, 21 tests)
-            ├── config.rs   # Configuration (108 lines, 23 tests)
-            ├── services.rs # Service discovery (41 lines, 13 tests)
-            └── client.rs   # Client utilities (66 lines, 13 tests)
+├── AGENTS.md                     # This file
+├── crates/
+│   ├── triton-core/              # ✅ COMPLETE - Foundation crate
+│   ├── triton-ufds/              # ✅ COMPLETE - UFDS client + models
+│   └── triton-sapi/              # ✅ COMPLETE - SAPI client + discovery
+└── services/                     # (Planned) Rust service implementations
+    └── ...                       # e.g., triton-sapi-server, triton-cnapi-server
 ```
 
 ## Current Status
@@ -49,6 +43,76 @@ triton-rust/
 4. Builder patterns - Ergonomic APIs with method chaining
 5. Comprehensive testing - High test coverage
 6. Documentation - All public APIs documented
+
+### ✅ Completed: triton-ufds v0.1.0
+
+**Status**: Production-ready, async LDAP client with comprehensive unit coverage
+
+**Highlights:**
+- Distinguished Name parser with strict validation
+- `User`, `Group`, and flag models mapped from UFDS responses
+- Configurable `UfdsClient` supporting TLS overrides, retryable operations, and group membership helpers
+- Mockable connector/session traits for deterministic tests
+
+### ✅ Completed: triton-sapi v0.1.0
+
+**Status**: Production-ready, async HTTP client + discovery layer with wiremock-backed tests
+
+**Highlights:**
+- Typed SAPI models (`Application`, `Service`, `Instance`) including optional fields and serde defaults
+- `SapiClient` with retry-aware request executor and fluent query builders
+- `SapiDiscovery` implementation of `ServiceDiscovery`, providing caching, fallback endpoints, and status tracking
+- Workspace documentation (`README.md`) and usage examples
+
+### ✅ Completed: triton-cnapi v0.1.0
+
+**Status**: Production-ready, async CNAPI client with typed server models and discovery adapter
+
+**Highlights:**
+- `Server`, `ServerNic`, and `UpdateServerRequest` models mirroring CNAPI payloads with chrono-backed timestamps
+- `CnapiClient` supporting query builders, updates, basic auth or token headers, and retry logic
+- `ServerListParams` helpers for composing `/servers` filters and pagination
+- `CnapiDiscovery` wrapper that reuses the SAPI discovery implementation to locate CNAPI endpoints
+
+### ✅ Completed: triton-vmapi v0.1.0
+
+**Status**: Production-ready, async VMAPI client with VM lifecycle helpers and batch/snapshot support
+
+**Highlights:**
+- `Vm`, `Nic`, `VmapiJob`, and snapshot models reflecting VMAPI responses with tolerant serde handling
+- `VmapiClient` implementing list/get/create/update/delete flows plus snapshot and batch operations
+- `VmQuery`/`JobListParams` builders for common filtering and pagination use-cases
+- `VmapiDiscovery` adapter piggybacking on SAPI discovery to resolve VMAPI endpoints
+
+### ✅ Completed: triton-napi v0.1.0
+
+**Status**: Production-ready, async NAPI client covering network, pool, and NIC management
+
+**Highlights:**
+- `Network`, `NetworkPool`, and `Nic` models with strong typing and serde support
+- `NapiClient` helpers for network CRUD, network pool lookups, and NIC operations with retry-aware HTTP
+- `NetworkQuery` builder for list filters and pagination
+- `NapiDiscovery` wrapper delegating endpoint discovery to SAPI
+
+### ✅ Completed: triton-papi v0.1.0
+
+**Status**: Production-ready, async PAPI client with package lifecycle helpers
+
+**Highlights:**
+- `Package`, `PackageNetwork`, and request models with typed UUID handling and serde support
+- `PapiClient` leveraging the shared `ServiceClient` for list/get/create/update/delete flows
+- `PackageListParams` query builder using the core `QueryParams` helper
+- `PapiDiscovery` wrapper reusing the shared discovery proxy to resolve endpoints via SAPI
+
+### ✅ Completed: triton-fwapi v0.1.0
+
+**Status**: Production-ready, async FWAPI client managing firewall rule lifecycle
+
+**Highlights:**
+- `FirewallRule` models with typed UUID wrappers and serde defaults for metadata
+- `FwapiClient` leveraging `ServiceClient` for list/get/create/update/delete rule operations
+- `FirewallRuleListParams` builder using shared query helpers for filtering
+- `FwapiDiscovery` adapter built on the core `ServiceDiscoveryProxy` for SAPI-backed endpoint resolution
 
 ### Git History
 
@@ -82,105 +146,53 @@ Located in `/tmp/` (from initial exploration):
 - `services/sapi_client.rs` - SAPI client implementation (425 lines)
 - `models/*.rs` - Domain model types (VMAPI, CNAPI, NAPI, PAPI, IMGAPI, FWAPI)
 
-## Next Steps: Future Crates
+## Mono-repo Architecture Direction
 
-### Priority 1: triton-ufds (UFDS/LDAP Client)
+While the immediate focus remains on Rust client libraries, the long-term vision includes porting the NodeJS Triton services into this mono-repo. With that future work in mind, keep the following layering pattern in consideration (no server-side code lives here yet):
 
-**Why first?** Authentication is foundational - needed by other services.
+1. **Shared types crates** – e.g. `crates/triton-sapi-types`, `crates/triton-cnapi-types`. These expose serde-friendly models that both the client and server can share.
+2. **Client crates** – e.g. `crates/triton-sapi` (already in place), depending on the types crate and offering reusable integration logic.
+3. **Server crates/binaries (future)** – when the service ports land, place them under `services/<name>/` (e.g., `services/triton-sapi-server`). They can depend on the shared types and clients without introducing circular dependencies. For now this is informational only; no server code is tracked in this repository.
 
-**What to implement:**
-- LDAP client for UFDS (User, Forensics, Directory Services)
-- User authentication and management
-- Group management
-- DN (Distinguished Name) handling
+Keeping these boundaries in mind lets us evolve clients independently today while leaving a clear runway for the eventual server migrations.
 
-**Reference:**
-- `/Users/nwilkens/workspace/triton-admin/backend/src/auth/ldap.rs`
-- Use `UfdsCredentials` from triton-core
+## Next Steps
 
-**Key types:**
-- `UfdsClient` - Main client
-- `User` - User representation
-- `Group` - Group representation
-- Authentication methods
+1. **Add shared SAPI types crate (optional, prep work)**
+   - If we anticipate reusing the SAPI models beyond the client, extract them into `crates/triton-sapi-types/` and have the client re-export from there.
+   - Keep this lightweight; the move can wait until another crate needs the types.
 
-### Priority 2: triton-sapi (Service API Client)
+2. **Next client targets (IMGAPI → PAPI → FWAPI)**
+   - Build dedicated async clients for each API in that order, following the established retry, discovery, and builder patterns.
+   - Use the corresponding NodeJS services in `~/workspace/triton/sdc-imgapi`, `~/workspace/triton/sdc-papi`, and `~/workspace/triton/sdc-fwapi` as authoritative server-side references while translating models and behaviours.
+   - Mirror the testing approach used for UFDS/SAPI (serde round-trips, wiremock stubs, trait mocks), capturing any gaps needed to support downstream reuse.
 
-**Why second?** Required for service discovery - needed by other clients.
+3. **Common utilities**
+   - Note any shared patterns (auth headers, pagination helpers, config loaders) that should live in `triton-core` before more clients arrive.
+   - Shared HTTP/service plumbing now lives in `triton-core` (`ServiceClient`, `ServiceDiscoveryProxy`, `QueryParams`); new clients should build on these instead of re-implementing retry/discovery logic.
 
-**What to implement:**
-- Service API client for discovering Triton services
-- Application and instance management
-- Endpoint discovery
+4. **Server-port awareness (future)**
+   - Continue designing clients and shared types with the eventual server migration in mind (e.g., avoid naming collisions, keep builder APIs extensible).
 
-**Reference:**
-- `/Users/nwilkens/workspace/triton-admin/backend/src/services/sapi_client.rs`
-- `/Users/nwilkens/workspace/triton-admin/backend/src/services/discovery_manager.rs`
+These client extractions directly support the ongoing work to tease apart `~/workspace/triton-admin`, letting other Triton projects depend on reusable crates as we migrate services from the NodeJS implementations toward Rust.
 
-**Key types:**
-- `SapiClient` - Main client
-- `Application` - SAPI application
-- `Instance` - Service instance
-- `DiscoveryManager` - Implements `ServiceDiscovery` trait from triton-core
+### IMGAPI client design snapshot
 
-### Priority 3: triton-vmapi (Virtual Machine API)
+- **Crate shape**: mirror `triton-vmapi`/`triton-cnapi` with `client.rs` and `models.rs`, re-exported from `lib.rs`, and depend on `triton-core` for errors, UUIDs, retry defaults, and `TritonService::Imgapi` wiring.
+- **Client API**: `ImgapiClientBuilder` (configurable retry/auth/token), methods for list/get/create/update/delete images, action helpers (activate/enable/disable), file import/export flows, and streaming file access backed by `reqwest`.
+- **Discovery**: `ImgapiDiscovery` wrapping SAPI discovery with `DiscoveryStatus` tracking, matching the pattern used by VMAPI (`Arc<RwLock<DiscoveryStatus>>` plus success/error instrumentation).
+- **Models**: port `ImageListParams`, `Image`, `CreateImageRequest`, `UpdateImageRequest`, `ImportImageRequest`, `ExportImageRequest`, and support structs from `triton-admin` (`backend/src/models/imgapi.rs`) while upgrading to strongly-typed UUID wrappers and serde helpers for tag/trait maps.
+- **Testing**: wiremock-driven client tests covering happy paths, error retries, and auth headers, alongside serde round-trips for every model; include discovery cache tests using mocked `ServiceDiscovery`.
+- **References**: source behaviour from `~/workspace/triton/sdc-imgapi` (Node service) and the Rust handlers in `~/workspace/triton-admin/backend/src/api/imgapi/`, ensuring parity during the migration from NodeJS to Rust.
 
-**What to implement:**
-- VM lifecycle management (create, start, stop, delete)
-- VM listing and filtering
-- VM metadata and tags
-- NIC management
+### PAPI client design snapshot
 
-**Reference:**
-- `/Users/nwilkens/workspace/triton-admin/backend/src/models/vmapi.rs`
-- `/Users/nwilkens/workspace/triton-admin/backend/src/api/vms.rs`
-
-**Key types:**
-- `VmapiClient` - Main client
-- `Vm` - Virtual machine representation
-- `VmState` enum - VM states (Running, Stopped, etc.)
-- `VmBrand` enum - VM types (Joyent, KVM, Bhyve, LX)
-- `Nic` - Network interface
-
-### Priority 4: triton-cnapi (Compute Node API)
-
-**What to implement:**
-- Server (compute node) management
-- Server capacity and utilization
-- Server tasks and jobs
-- Hardware information
-
-**Reference:**
-- `/Users/nwilkens/workspace/triton-admin/backend/src/models/cnapi.rs`
-
-**Key types:**
-- `CnapiClient` - Main client
-- `Server` - Compute node representation
-- Server status and health
-
-### Priority 5: triton-napi (Network API)
-
-**What to implement:**
-- Network creation and management
-- Network pools
-- NIC tags
-- IP address management
-
-**Reference:**
-- `/Users/nwilkens/workspace/triton-admin/backend/src/models/napi.rs`
-
-**Key types:**
-- `NapiClient` - Main client
-- `Network` - Network representation
-- `NicTag` - NIC tag representation
-
-### Priority 6: Other Services
-
-- **triton-papi** - Package API (VM sizing/packages)
-- **triton-imgapi** - Image API (OS images)
-- **triton-fwapi** - Firewall API (firewall rules)
-- **triton-amon** - Monitoring API
-- **triton-workflow** - Workflow API
+- **Crate shape**: add `crates/triton-papi` with the usual `client.rs` + `models.rs` re-exported from `lib.rs`, depending on `triton-core` for error types, UUID wrappers (`PackageUuid`, `OwnerUuid`), query helpers, `ServiceClient`, and discovery proxy support.
+- **Client API**: `PapiClientBuilder` reusing `ServiceClientBuilder` defaults (`PAPI_DEFAULT_TIMEOUT`), methods for listing packages with filters, retrieving by UUID, creating/updating/deleting packages, plus any trait/ACL helpers surfaced by the Node implementation. Authentication hooks remain optional via `with_basic_auth` / `with_token`.
+- **Models**: port `Package`, `PackageNetwork`, `CreatePackageRequest`, `UpdatePackageRequest`, and `PackageListParams` from `triton-admin/backend/src/models/papi.rs`, tightening types where possible (UUID wrappers, bool maps) and using `triton_core::query::QueryParams` for list filters.
+- **Discovery**: `PapiDiscovery` constructed via `ServiceDiscoveryProxy::for_service(…, TritonService::Papi)` to mirror IMGAPI/VMAPI consistency and preserve status metrics.
+- **Testing**: wiremock-backed client tests for list/get/create/update/delete flows plus error mapping, and serde round-trips for the key request/response models. Reuse the shared discovery proxy tests to ensure delegation works.
+- **References**: implementation details drawn from `~/workspace/triton-admin/backend/src/api/papi/` and the legacy service code in `~/workspace/triton/sdc-papi`, keeping parity with existing behaviour as functionality migrates to Rust.
 
 ## Development Workflow
 
@@ -507,7 +519,7 @@ Location: `/tmp/`
 
 **Last Updated:** 2025-10-24
 **Project Status:** triton-core complete, ready for service crates
-**Next Priority:** Implement triton-ufds for authentication
+**Next Priority:** Implement triton-imgapi, triton-papi, and triton-fwapi clients
 
 ## Notes for AI Agents
 

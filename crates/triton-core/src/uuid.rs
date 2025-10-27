@@ -99,6 +99,8 @@ uuid_type!(PackageUuid, "Package UUID");
 uuid_type!(OwnerUuid, "Owner/User UUID");
 uuid_type!(AppUuid, "Application UUID (SAPI)");
 uuid_type!(InstanceUuid, "Instance UUID (SAPI)");
+uuid_type!(ServiceUuid, "Service UUID (SAPI)");
+uuid_type!(JobUuid, "Job UUID (Workflow)");
 uuid_type!(FirewallRuleUuid, "Firewall Rule UUID");
 
 /// Validates a UUID string.

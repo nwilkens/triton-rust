@@ -22,6 +22,7 @@
 pub mod client;
 pub mod config;
 pub mod error;
+pub mod query;
 pub mod services;
 pub mod types;
 pub mod uuid;

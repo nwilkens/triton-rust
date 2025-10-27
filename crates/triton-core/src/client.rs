@@ -3,7 +3,13 @@
 //! This module provides HTTP client configuration and retry policies
 //! for reliable communication with Triton DataCenter services.
 
+use crate::error::Error;
+use crate::types::TritonService;
+use reqwest::{Client, ClientBuilder, Method, RequestBuilder, Response, StatusCode};
 use std::time::Duration;
+use tokio::time::sleep;
+use tracing::debug;
+use url::Url;
 
 // Service-specific timeout configurations (in seconds)
 
@@ -249,6 +255,275 @@ impl Default for ClientConfig {
     }
 }
 
+/// Builder for [`ServiceClient`].
+#[derive(Debug, Clone)]
+pub struct ServiceClientBuilder {
+    service: TritonService,
+    base_url: Url,
+    http_config: ClientConfig,
+    retry_policy: RetryPolicy,
+    basic_auth: Option<(String, String)>,
+    token: Option<String>,
+    user_agent: String,
+}
+
+impl ServiceClientBuilder {
+    /// Create a builder for the specified service and base URL.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the base URL is invalid.
+    pub fn new(
+        service: TritonService,
+        base_url: impl AsRef<str>,
+        default_timeout: Duration,
+    ) -> crate::Result<Self> {
+        let url = Url::parse(base_url.as_ref()).map_err(|err| {
+            Error::ConfigError(format!("Invalid base URL `{}`: {err}", base_url.as_ref()))
+        })?;
+
+        let config = ClientConfig::new().with_timeout(default_timeout);
+        let user_agent = format!(
+            "triton-{}-client/{}",
+            service.name(),
+            env!("CARGO_PKG_VERSION")
+        );
+
+        Ok(Self {
+            service,
+            base_url: url,
+            retry_policy: config.retry_policy,
+            http_config: config,
+            basic_auth: None,
+            token: None,
+            user_agent,
+        })
+    }
+
+    /// Override the retry policy.
+    #[must_use]
+    pub fn with_retry_policy(mut self, retry: RetryPolicy) -> Self {
+        self.retry_policy = retry;
+        self.http_config.retry_policy = retry;
+        self
+    }
+
+    /// Override the HTTP client configuration.
+    #[must_use]
+    pub fn with_http_config(mut self, config: ClientConfig) -> Self {
+        self.retry_policy = config.retry_policy;
+        self.http_config = config;
+        self
+    }
+
+    /// Configure HTTP basic authentication credentials.
+    #[must_use]
+    pub fn with_basic_auth(
+        mut self,
+        username: impl Into<String>,
+        password: impl Into<String>,
+    ) -> Self {
+        self.basic_auth = Some((username.into(), password.into()));
+        self
+    }
+
+    /// Configure an X-Auth-Token header.
+    #[must_use]
+    pub fn with_token(mut self, token: impl Into<String>) -> Self {
+        self.token = Some(token.into());
+        self
+    }
+
+    /// Override the default user agent.
+    #[must_use]
+    pub fn with_user_agent(mut self, agent: impl Into<String>) -> Self {
+        self.user_agent = agent.into();
+        self
+    }
+
+    /// Build the service client.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the HTTP client cannot be constructed.
+    pub fn build(self) -> crate::Result<ServiceClient> {
+        let mut builder = ClientBuilder::new()
+            .timeout(self.http_config.timeout)
+            .user_agent(&self.user_agent)
+            .pool_idle_timeout(self.http_config.pool_idle_timeout)
+            .pool_max_idle_per_host(self.http_config.pool_max_idle_per_host)
+            .connect_timeout(Duration::from_secs(10));
+
+        if !self.http_config.enable_compression {
+            builder = builder.no_gzip();
+        }
+
+        let http = builder
+            .build()
+            .map_err(|err| Error::ConfigError(format!("Failed to build HTTP client: {err}")))?;
+
+        Ok(ServiceClient {
+            http,
+            base_url: self.base_url,
+            retry_policy: self.retry_policy,
+            basic_auth: self.basic_auth,
+            token: self.token,
+            service: self.service,
+        })
+    }
+}
+
+/// Shared HTTP client wrapper used by Triton service clients.
+#[derive(Clone)]
+pub struct ServiceClient {
+    http: Client,
+    base_url: Url,
+    retry_policy: RetryPolicy,
+    basic_auth: Option<(String, String)>,
+    token: Option<String>,
+    service: TritonService,
+}
+
+impl ServiceClient {
+    /// Returns the service associated with this client.
+    #[must_use]
+    pub const fn service(&self) -> TritonService {
+        self.service
+    }
+
+    /// Returns the base URL for the service.
+    #[must_use]
+    pub fn base_url(&self) -> &Url {
+        &self.base_url
+    }
+
+    /// Access the underlying reqwest client.
+    #[must_use]
+    pub fn http_client(&self) -> &Client {
+        &self.http
+    }
+
+    /// Construct a request builder for the given method/path with optional query parameters.
+    pub fn request(
+        &self,
+        method: Method,
+        path: &str,
+        params: &[(&'static str, String)],
+    ) -> crate::Result<RequestBuilder> {
+        let url = self.build_url(path)?;
+        let mut request = self.http.request(method, url).query(params);
+
+        if let Some((user, pass)) = &self.basic_auth {
+            request = request.basic_auth(user, Some(pass));
+        }
+        if let Some(token) = &self.token {
+            request = request.header("X-Auth-Token", token);
+        }
+
+        Ok(request)
+    }
+
+    /// Execute a request with retry semantics.
+    pub async fn execute_with_retry<F, G>(
+        &self,
+        method: Method,
+        path: &str,
+        params: &[(&'static str, String)],
+        mut configure: F,
+        mut map_error: G,
+    ) -> crate::Result<Response>
+    where
+        F: FnMut(RequestBuilder) -> RequestBuilder,
+        G: FnMut(StatusCode, String) -> Error,
+    {
+        let mut attempt = 0;
+        #[allow(unused_assignments)]
+        let mut last_error: Option<Error> = None;
+
+        loop {
+            let builder = self.request(method.clone(), path, params)?;
+            let request = configure(builder);
+
+            debug!(
+                service = self.service.name(),
+                path, attempt, "Service request"
+            );
+
+            match request.send().await {
+                Ok(response) => {
+                    let status = response.status();
+                    if status.is_success() {
+                        return Ok(response);
+                    }
+
+                    let text = response
+                        .text()
+                        .await
+                        .unwrap_or_else(|_| "Unknown error".to_string());
+                    let error = map_error(status, text);
+                    if should_retry(status) {
+                        last_error = Some(error);
+                    } else {
+                        return Err(error);
+                    }
+                }
+                Err(err) => {
+                    let error = Error::from(err);
+                    if matches!(
+                        error,
+                        Error::Timeout(_) | Error::ServiceUnavailable(_) | Error::HttpError(_)
+                    ) {
+                        last_error = Some(error);
+                    } else {
+                        return Err(error);
+                    }
+                }
+            }
+
+            attempt += 1;
+            if attempt > self.retry_policy.max_retries {
+                break;
+            }
+            let delay = self.retry_policy.delay_for_attempt(attempt);
+            if delay > Duration::from_millis(0) {
+                debug!(
+                    service = self.service.name(),
+                    ?delay,
+                    "Retrying service request"
+                );
+                sleep(delay).await;
+            }
+        }
+
+        Err(last_error.unwrap_or_else(|| {
+            Error::ServiceUnavailable(format!(
+                "{} request failed after retries",
+                self.service.name()
+            ))
+        }))
+    }
+
+    fn build_url(&self, path: &str) -> crate::Result<Url> {
+        let normalized = if path.starts_with('/') {
+            &path[1..]
+        } else {
+            path
+        };
+        self.base_url
+            .join(normalized)
+            .map_err(|err| Error::InvalidEndpoint(format!("Invalid path `{path}`: {err}")))
+    }
+}
+
+fn should_retry(status: StatusCode) -> bool {
+    matches!(
+        status,
+        StatusCode::TOO_MANY_REQUESTS
+            | StatusCode::BAD_GATEWAY
+            | StatusCode::SERVICE_UNAVAILABLE
+            | StatusCode::GATEWAY_TIMEOUT
+    ) || status.is_server_error()
+}
 
 #[cfg(test)]
 mod tests {
@@ -272,8 +547,14 @@ mod tests {
     fn test_retry_policy_new() {
         let policy = RetryPolicy::new();
         assert_eq!(policy.max_retries, DEFAULT_MAX_RETRIES);
-        assert_eq!(policy.initial_delay, Duration::from_millis(DEFAULT_RETRY_DELAY_MS));
-        assert_eq!(policy.max_delay, Duration::from_millis(DEFAULT_RETRY_MAX_DELAY_MS));
+        assert_eq!(
+            policy.initial_delay,
+            Duration::from_millis(DEFAULT_RETRY_DELAY_MS)
+        );
+        assert_eq!(
+            policy.max_delay,
+            Duration::from_millis(DEFAULT_RETRY_MAX_DELAY_MS)
+        );
         assert_eq!(policy.backoff_multiplier, 2);
     }
 

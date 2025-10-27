@@ -80,9 +80,9 @@ impl TritonClientConfig {
             service_discovery: ServiceDiscoveryConfig::default(),
         };
 
-        config.validate().map_err(|e| {
-            Error::ConfigError(format!("Invalid configuration: {}", e))
-        })?;
+        config
+            .validate()
+            .map_err(|e| Error::ConfigError(format!("Invalid configuration: {}", e)))?;
 
         Ok(config)
     }
@@ -381,9 +381,9 @@ impl ServiceEndpointConfig {
             timeout_override_secs: None,
         };
 
-        config.validate().map_err(|e| {
-            Error::ConfigError(format!("Invalid endpoint configuration: {}", e))
-        })?;
+        config
+            .validate()
+            .map_err(|e| Error::ConfigError(format!("Invalid endpoint configuration: {}", e)))?;
 
         Ok(config)
     }
@@ -407,8 +407,7 @@ impl ServiceEndpointConfig {
     ///
     /// Returns an error if the URL cannot be parsed.
     pub fn parse_url(&self) -> Result<Url, Error> {
-        Url::parse(&self.url)
-            .map_err(|e| Error::ConfigError(format!("Invalid service URL: {}", e)))
+        Url::parse(&self.url).map_err(|e| Error::ConfigError(format!("Invalid service URL: {}", e)))
     }
 }
 
@@ -521,9 +520,7 @@ mod tests {
         let vmapi = ServiceEndpointConfig::new("http://vmapi:80").unwrap();
         let cnapi = ServiceEndpointConfig::new("http://cnapi:80").unwrap();
 
-        let endpoints = ServiceEndpoints::new()
-            .with_vmapi(vmapi)
-            .with_cnapi(cnapi);
+        let endpoints = ServiceEndpoints::new().with_vmapi(vmapi).with_cnapi(cnapi);
 
         assert!(endpoints.vmapi.is_some());
         assert!(endpoints.cnapi.is_some());
@@ -598,7 +595,10 @@ mod tests {
         let deserialized: ServiceEndpointConfig = serde_json::from_str(&json).unwrap();
 
         assert_eq!(config.url, deserialized.url);
-        assert_eq!(config.timeout_override_secs, deserialized.timeout_override_secs);
+        assert_eq!(
+            config.timeout_override_secs,
+            deserialized.timeout_override_secs
+        );
     }
 
     #[test]

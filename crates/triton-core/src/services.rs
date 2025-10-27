@@ -3,8 +3,11 @@
 //! This module provides types and traits for discovering and managing Triton DataCenter services,
 //! including UFDS credentials and discovery status tracking.
 
+use crate::error::Error;
+use crate::types::TritonService;
 use crate::uuid::AppUuid;
 use serde::{Deserialize, Serialize};
+use std::sync::{Arc, RwLock};
 use std::time::Instant;
 
 /// UFDS (User, Forensics, and Directory Services) credentials.
@@ -214,9 +217,88 @@ pub trait ServiceDiscovery: Send + Sync {
     }
 }
 
+/// Generic discovery proxy that records discovery status while delegating to another implementation.
+#[derive(Clone)]
+pub struct ServiceDiscoveryProxy {
+    inner: Arc<dyn ServiceDiscovery>,
+    status: Arc<RwLock<DiscoveryStatus>>,
+    service_name: String,
+}
+
+impl ServiceDiscoveryProxy {
+    /// Create a proxy for a specific service name.
+    #[must_use]
+    pub fn new(inner: Arc<dyn ServiceDiscovery>, service_name: impl Into<String>) -> Self {
+        Self {
+            inner,
+            status: Arc::new(RwLock::new(DiscoveryStatus::new())),
+            service_name: service_name.into(),
+        }
+    }
+
+    /// Create a proxy for a [`TritonService`].
+    #[must_use]
+    pub fn for_service(inner: Arc<dyn ServiceDiscovery>, service: TritonService) -> Self {
+        Self::new(inner, service.name())
+    }
+
+    fn record_success(&self, count: usize) {
+        if let Ok(mut status) = self.status.write() {
+            *status = status.clone().with_success(count);
+        }
+    }
+
+    fn record_error(&self, error: &Error) {
+        if let Ok(mut status) = self.status.write() {
+            status.last_error = Some(error.to_string());
+        }
+    }
+
+    /// Return the service name associated with this proxy.
+    #[must_use]
+    pub fn service_name(&self) -> &str {
+        &self.service_name
+    }
+}
+
+#[async_trait::async_trait]
+impl ServiceDiscovery for ServiceDiscoveryProxy {
+    async fn discover_service(&self, service_name: &str) -> crate::Result<Vec<String>> {
+        match self.inner.discover_service(service_name).await {
+            Ok(endpoints) => {
+                self.record_success(endpoints.len());
+                Ok(endpoints)
+            }
+            Err(err) => {
+                self.record_error(&err);
+                Err(err)
+            }
+        }
+    }
+
+    async fn discover_all_services(&self) -> crate::Result<Vec<String>> {
+        self.inner.discover_service(&self.service_name).await
+    }
+
+    fn get_status(&self) -> DiscoveryStatus {
+        self.status
+            .read()
+            .map(|status| status.clone())
+            .unwrap_or_else(|_| DiscoveryStatus::new())
+    }
+
+    fn clear_cache(&self) {
+        if let Ok(mut status) = self.status.write() {
+            status.cache_hits = 0;
+            status.cache_misses = 0;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
 
     #[test]
     fn test_ufds_credentials_new() {
@@ -291,8 +373,8 @@ mod tests {
 
     #[test]
     fn test_discovery_status_with_error() {
-        let status = DiscoveryStatus::new()
-            .with_error("Test error".to_string(), Some("vmapi".to_string()));
+        let status =
+            DiscoveryStatus::new().with_error("Test error".to_string(), Some("vmapi".to_string()));
         assert!(status.last_discovery_at.is_some());
         assert_eq!(status.last_error, Some("Test error".to_string()));
         assert_eq!(status.failed_services, vec!["vmapi"]);
@@ -322,8 +404,7 @@ mod tests {
         let healthy = DiscoveryStatus::new().with_success(5);
         assert!(healthy.is_healthy());
 
-        let unhealthy = DiscoveryStatus::new()
-            .with_error("Error".to_string(), None);
+        let unhealthy = DiscoveryStatus::new().with_error("Error".to_string(), None);
         assert!(!unhealthy.is_healthy());
 
         let no_services = DiscoveryStatus::new();
@@ -343,7 +424,6 @@ mod tests {
         assert!(empty.time_since_last_success().is_none());
         assert!(empty.time_since_last_attempt().is_none());
     }
-
 
     #[test]
     fn test_discovery_status_builder_chain() {
@@ -378,4 +458,20 @@ mod tests {
         assert_eq!(status.discovered_services, 1);
     }
 
+    #[tokio::test]
+    async fn test_service_discovery_proxy_records_success() {
+        let mut mock = MockServiceDiscovery::new();
+
+        mock.expect_discover_service()
+            .with(mockall::predicate::eq("imgapi"))
+            .returning(|_| Ok(vec!["http://imgapi:80".to_string()]));
+
+        let proxy = ServiceDiscoveryProxy::for_service(Arc::new(mock), TritonService::Imgapi);
+        let endpoints = proxy.discover_service("imgapi").await.unwrap();
+        assert_eq!(endpoints, vec!["http://imgapi:80"]);
+
+        let status = proxy.get_status();
+        assert_eq!(status.discovered_services, 1);
+        assert!(status.last_error.is_none());
+    }
 }

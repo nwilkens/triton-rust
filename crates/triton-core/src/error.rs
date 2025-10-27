@@ -247,10 +247,7 @@ mod tests {
             Error::HttpError("test".to_string()).error_code(),
             "HTTP_ERROR"
         );
-        assert_eq!(
-            Error::Timeout("test".to_string()).error_code(),
-            "TIMEOUT"
-        );
+        assert_eq!(Error::Timeout("test".to_string()).error_code(), "TIMEOUT");
         assert_eq!(
             Error::NotFound("test".to_string()).error_code(),
             "NOT_FOUND"
@@ -267,10 +264,7 @@ mod tests {
             Error::ValidationError("test".to_string()).error_code(),
             "VALIDATION_ERROR"
         );
-        assert_eq!(
-            Error::Conflict("test".to_string()).error_code(),
-            "CONFLICT"
-        );
+        assert_eq!(Error::Conflict("test".to_string()).error_code(), "CONFLICT");
         assert_eq!(
             Error::ExternalServiceError {
                 service: "test".to_string(),
