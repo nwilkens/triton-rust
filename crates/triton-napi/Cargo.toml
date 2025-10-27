@@ -1,0 +1,24 @@
+[package]
+name = "triton-napi"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+reqwest.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+thiserror.workspace = true
+url.workspace = true
+chrono.workspace = true
+triton-core = { path = "../triton-core" }
+
+[dev-dependencies]
+mockall.workspace = true
+tokio.workspace = true
+wiremock.workspace = true
