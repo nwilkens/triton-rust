@@ -1,0 +1,129 @@
+[
+  {
+    "uuid": "fff1c862-8ce7-4077-8a1e-1492ce9a9eff",
+    "alias": "sample-dev-qa-pool",
+    "autoboot": false,
+    "brand": "bhyve",
+    "billing_id": "00000000-0000-0000-0000-000000000000",
+    "cpu_cap": 1600,
+    "cpu_shares": 510,
+    "create_timestamp": "2025-02-27T21:08:10.103Z",
+    "customer_metadata": {
+      "cloud-init:user-data": "#cloud-config\npackages:\n  - jq\n  - curl\nhostname: sample-dev-qa-pool\nwrite_files:\n  - path: /etc/placeholder\n    content: |\n      SECRET=<<REDACTED>>\nruncmd:\n  - echo 'bootstrap complete'\ntoken: <<REDACTED_TOKEN>>\n"
+    },
+    "datasets": [],
+    "disks": [],
+    "firewall_enabled": false,
+    "flexible_disk_size": 614400,
+    "ram": 65280,
+    "max_physical_memory": 65280,
+    "max_swap": 131072,
+    "max_locked_memory": 65536,
+    "max_lwps": 2000,
+    "quota": 102400,
+    "state": "running",
+    "owner_uuid": "11111111-2222-3333-4444-555555555555",
+    "server_uuid": "44454c4c-5000-1047-8052-b3c04f584432",
+    "image_uuid": "01b2c898-945f-11e1-a523-af1afbe22822",
+    "resolvers": [
+      "10.0.28.2",
+      "10.0.28.3",
+      "1.1.1.1",
+      "8.8.8.8"
+    ],
+    "nics": [
+      {
+        "interface": "net0",
+        "mac": "02:00:00:1a:2b:3c",
+        "vlan_id": 119,
+        "nic_tag": "internal",
+        "gateway": "10.0.28.1",
+        "gateways": [
+          "10.0.28.1"
+        ],
+        "netmask": "255.255.254.0",
+        "ip": "10.0.28.108",
+        "ips": [
+          "10.0.28.108/23"
+        ],
+        "network_uuid": "331ed5e5-f9d2-47b8-a151-60338e868e38",
+        "model": "virtio",
+        "mtu": 1500,
+        "primary": true
+      }
+    ],
+    "snapshots": [],
+    "tags": {
+      "app": "sample"
+    },
+    "zfs_filesystem": "zones/fff1c862-8ce7-4077-8a1e-1492ce9a9eff",
+    "zone_state": "running",
+    "zonepath": "/zones/fff1c862-8ce7-4077-8a1e-1492ce9a9eff",
+    "zpool": "zones"
+  },
+  {
+    "uuid": "aaaabbbb-cccc-dddd-eeee-ffffffffffff",
+    "alias": "k8s-worker-01",
+    "autoboot": true,
+    "brand": "joyent",
+    "billing_id": "99999999-8888-7777-6666-555555555555",
+    "cpu_cap": 800,
+    "cpu_shares": 200,
+    "create_timestamp": "2025-02-01T11:22:33.444Z",
+    "customer_metadata": {
+      "cloud-init:user-data": "#cloud-config\nhostname: k8s-worker-01\nusers:\n  - name: ops\n    ssh-authorized-keys:\n      - ssh-ed25519 AAAA<<REDACTED_KEY>>"
+    },
+    "datasets": [
+      "zones/aaaabbbb-cccc-dddd-eeee-ffffffffffff/data"
+    ],
+    "disks": [],
+    "firewall_enabled": true,
+    "ram": 32768,
+    "max_physical_memory": 32768,
+    "max_swap": 65536,
+    "max_locked_memory": 32768,
+    "max_lwps": 1000,
+    "quota": 51200,
+    "state": "stopped",
+    "owner_uuid": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+    "server_uuid": "12345678-1234-5678-9abc-def012345678",
+    "image_uuid": "abcdefab-1234-5678-9abc-abcdefabcdef",
+    "resolvers": [
+      "10.10.10.10"
+    ],
+    "nics": [
+      {
+        "interface": "net0",
+        "mac": "00:00:5e:00:53:af",
+        "vlan_id": 100,
+        "nic_tag": "external",
+        "gateway": "203.0.113.1",
+        "gateways": [
+          "203.0.113.1"
+        ],
+        "netmask": "255.255.255.0",
+        "ip": "203.0.113.42",
+        "ips": [
+          "203.0.113.42/24"
+        ],
+        "network_uuid": "aaaaaaaa-bbbb-cccc-dddd-ffffffffffff",
+        "model": "e1000",
+        "mtu": 1500,
+        "primary": true
+      }
+    ],
+    "snapshots": [
+      {
+        "name": "baseline",
+        "created": "2025-02-05T08:00:00Z"
+      }
+    ],
+    "tags": {
+      "role": "worker"
+    },
+    "zfs_filesystem": "zones/aaaabbbb-cccc-dddd-eeee-ffffffffffff",
+    "zone_state": "stopped",
+    "zonepath": "/zones/aaaabbbb-cccc-dddd-eeee-ffffffffffff",
+    "zpool": "zones"
+  }
+]
